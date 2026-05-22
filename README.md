@@ -2,7 +2,7 @@
 
 # 📡 Telegram Channel Reader
 
-A Python GUI application that fetches and displays text messages from public Telegram channels using Google Translate as a proxy. Works without modifying your hosts file by using custom IP mapping.
+A Python GUI application that fetches and displays text messages from public Telegram channels using Google Translate as a proxy. Works by using custom IP mapping. #FreeIran
 
 ![Screenshot](screenshot.png) <!-- optional: add a screenshot later -->
 
