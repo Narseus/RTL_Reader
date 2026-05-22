@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
-
 import sys
 import threading
 from urllib.parse import quote
+from datetime import datetime
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 from playwright.sync_api import sync_playwright
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext, messagebox, filedialog
 
 # ==================== CONFIGURATION ====================
 
 CUSTOM_DNS = {
-    "translate.google.com": "216.239.38.120",    # Example Google IP (change if needed)
+    "translate.google.com": "216.239.38.120",
     "translate.googleapis.com": "216.239.38.120",
     "fonts.googleapis.com": "216.239.38.120",
     "fonts.gstatic.com": "216.239.38.120",
@@ -71,11 +71,27 @@ def fetch_with_curl_cffi(channel: str, max_msgs: int):
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        message_divs = soup.find_all("div", class_="tgme_widget_message_text")
-        messages = [div.get_text(strip=True) for div in message_divs if div.get_text(strip=True)]
-        if messages:
-            return messages[:max_msgs]
-        return None
+        message_containers = soup.find_all("div", class_="tgme_widget_message")
+        result = []
+        for container in message_containers[:max_msgs]:
+            msg_div = container.find("div", class_="tgme_widget_message_text")
+            if not msg_div:
+                continue
+            text = msg_div.get_text(strip=True)
+            if not text:
+                continue
+            # Extract timestamp
+            time_div = container.find("div", class_="tgme_widget_message_date")
+            if not time_div:
+                time_tag = container.find("time")
+                if time_tag:
+                    timestamp = time_tag.get_text(strip=True)
+                else:
+                    timestamp = None
+            else:
+                timestamp = time_div.get_text(strip=True)
+            result.append((text, timestamp))
+        return result if result else None
     except Exception as e:
         print(f"[curl_cffi] Error: {e}")
         return None
@@ -96,16 +112,30 @@ def fetch_with_playwright(channel: str, max_msgs: int):
             if button:
                 button.click()
                 page.wait_for_selector(".tgme_widget_message_text", timeout=15000)
-            message_elements = page.query_selector_all(".tgme_widget_message_text")
-            messages = [el.inner_text().strip() for el in message_elements if el.inner_text().strip()]
-            return messages[:max_msgs]
+            message_elements = page.query_selector_all(".tgme_widget_message")
+            result = []
+            for el in message_elements[:max_msgs]:
+                text_el = el.query_selector(".tgme_widget_message_text")
+                if not text_el:
+                    continue
+                text = text_el.inner_text().strip()
+                if not text:
+                    continue
+                # Extract timestamp
+                time_el = el.query_selector(".tgme_widget_message_date")
+                if not time_el:
+                    time_el = el.query_selector("time")
+                timestamp = time_el.inner_text().strip() if time_el else None
+                result.append((text, timestamp))
+            return result if result else None
         except Exception as e:
             print(f"[Playwright] Error: {e}")
-            return []
+            return None
         finally:
             browser.close()
 
 def fetch_messages(channel: str, max_msgs: int, progress_callback=None, status_callback=None):
+    """Returns list of (message_text, timestamp) or None"""
     if status_callback:
         status_callback("Using curl_cffi...")
     messages = fetch_with_curl_cffi(channel, max_msgs)
@@ -121,7 +151,7 @@ class TelegramFetcherGUI:
     def __init__(self, root):
         self.root = root
         root.title("Telegram Channel Reader")
-        root.geometry("750x650")
+        root.geometry("750x700")
         root.resizable(True, True)
         root.configure(bg='#f0f2f5')
 
@@ -140,6 +170,7 @@ class TelegramFetcherGUI:
         style.configure('Header.TLabel', font=self.heading_font, foreground='#1a73e8')
         style.configure('Hint.TLabel', font=(self.font_family, 9), foreground='#5f6368')
         style.configure('Status.TLabel', font=(self.font_family, 9, 'italic'), foreground='#5f6368')
+        style.configure('Count.TLabel', font=(self.font_family, 9), foreground='#1e8e3e')
 
         main_frame = ttk.Frame(root, padding="20")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -170,9 +201,14 @@ class TelegramFetcherGUI:
         self.progress = ttk.Progressbar(main_frame, mode='indeterminate')
         self.progress.grid(row=6, column=0, sticky='ew', pady=(0,10))
 
-        ttk.Label(main_frame, text="Messages:", style='Header.TLabel').grid(row=7, column=0, sticky='w', pady=(0,5))
+        # Message count label
+        self.count_var = tk.StringVar(value="0 messages")
+        count_label = ttk.Label(main_frame, textvariable=self.count_var, style='Count.TLabel')
+        count_label.grid(row=7, column=0, sticky='w', pady=(0,5))
+
+        ttk.Label(main_frame, text="Messages:", style='Header.TLabel').grid(row=8, column=0, sticky='w', pady=(0,5))
         output_frame = ttk.Frame(main_frame)
-        output_frame.grid(row=8, column=0, sticky='nsew', pady=(0,10))
+        output_frame.grid(row=9, column=0, sticky='nsew', pady=(0,10))
         output_frame.columnconfigure(0, weight=1)
         output_frame.rowconfigure(0, weight=1)
 
@@ -190,9 +226,21 @@ class TelegramFetcherGUI:
         self.output_text.tag_configure('rtl', justify='right', spacing3=8, lmargin1=10, lmargin2=10, rmargin=10)
         self.output_text.tag_configure('ltr', justify='left', spacing3=8, lmargin1=10, lmargin2=10, rmargin=10)
 
+        # Button frame for extra actions
+        action_frame = ttk.Frame(main_frame)
+        action_frame.grid(row=10, column=0, sticky='ew', pady=(0,5))
+        action_frame.columnconfigure(0, weight=1)
+        ttk.Button(action_frame, text="📁 Export to File", command=self.export_messages).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="📋 Copy All", command=self.copy_messages).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="🗑 Clear", command=self.clear_output).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="ℹ About", command=self.about_dialog).pack(side=tk.LEFT, padx=5)
+
         main_frame.columnconfigure(0, weight=1)
-        main_frame.rowconfigure(8, weight=1)
+        main_frame.rowconfigure(9, weight=1)
         channel_entry.focus_set()
+
+        # Internal storage for fetched messages with timestamps
+        self.last_fetched_data = []  # list of (text, timestamp)
 
     def start_fetch(self):
         self.fetch_btn.config(state=tk.DISABLED)
@@ -210,38 +258,97 @@ class TelegramFetcherGUI:
         max_msgs = self.max_var.get()
         def update_status(msg):
             self.root.after(0, lambda: self.status_var.set(msg))
-        messages = fetch_messages(channel, max_msgs, status_callback=update_status)
-        self.root.after(0, self._on_fetch_done, messages)
+        messages_with_ts = fetch_messages(channel, max_msgs, status_callback=update_status)
+        self.root.after(0, self._on_fetch_done, messages_with_ts)
 
     def _insert_message(self, index, message):
-        """Insert a single message with proper RTL/LTR formatting.
-        Uses Unicode RTL Isolate characters to keep numbers/English/emojis in correct order."""
+        """Insert a single message with proper RTL/LTR formatting."""
         msg = message.strip()
         if not msg:
             return
         formatted = f"{index}. {msg}"
         if has_rtl_chars(msg):
-            # Wrap with RTL Isolate (U+2067) and Pop Directional Isolate (U+2069)
             isolated_msg = f"\u2067{formatted}\u2069"
             self.output_text.insert(tk.END, isolated_msg + "\n\n", 'rtl')
         else:
             self.output_text.insert(tk.END, formatted + "\n\n", 'ltr')
 
-    def _on_fetch_done(self, messages, error_msg=None):
+    def _on_fetch_done(self, messages_with_ts, error_msg=None):
         self.progress.stop()
         self.fetch_btn.config(state=tk.NORMAL)
         if error_msg:
             self.status_var.set(f"Error: {error_msg}")
             messagebox.showerror("Error", error_msg)
             return
-        if not messages:
+        if not messages_with_ts:
             self.status_var.set("No messages found. Check channel name or Google Translate IP.")
             messagebox.showwarning("No messages", "Could not retrieve any messages.\nCheck if the channel is public or your custom IP is correct.")
+            self.last_fetched_data = []
+            self.count_var.set("0 messages")
             return
-        self.status_var.set(f"Fetched {len(messages)} messages.")
-        for i, msg in enumerate(messages, 1):
+        self.last_fetched_data = messages_with_ts
+        self.output_text.delete(1.0, tk.END)
+        for i, (msg, _) in enumerate(messages_with_ts, 1):
             self._insert_message(i, msg)
+        self.status_var.set(f"Fetched {len(messages_with_ts)} messages.")
+        self.count_var.set(f"{len(messages_with_ts)} messages")
         self.output_text.see(tk.END)
+
+    def export_messages(self):
+        """Export current messages (with timestamps if available) to a text file."""
+        if not self.last_fetched_data:
+            messagebox.showinfo("No data", "No messages to export. Please fetch messages first.")
+            return
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            title="Export Messages"
+        )
+        if not file_path:
+            return
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(f"Telegram Channel: @{self.channel_var.get().strip().lstrip('@')}\n")
+                f.write(f"Exported on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("="*60 + "\n\n")
+                for idx, (text, timestamp) in enumerate(self.last_fetched_data, 1):
+                    if timestamp:
+                        f.write(f"[{idx}] {timestamp}\n")
+                    else:
+                        f.write(f"[{idx}]\n")
+                    f.write(f"{text}\n\n")
+            messagebox.showinfo("Export Complete", f"Messages exported to:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Could not save file:\n{str(e)}")
+
+    def copy_messages(self):
+        """Copy all displayed messages (plain text) to clipboard."""
+        if not self.output_text.get(1.0, tk.END).strip():
+            messagebox.showinfo("Nothing to copy", "No messages to copy.")
+            return
+        text_content = self.output_text.get(1.0, tk.END).strip()
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text_content)
+        self.status_var.set(f"Copied {len(self.last_fetched_data)} messages to clipboard.")
+
+    def clear_output(self):
+        """Clear the output text area and reset stored data."""
+        self.output_text.delete(1.0, tk.END)
+        self.last_fetched_data = []
+        self.count_var.set("0 messages")
+        self.status_var.set("Cleared.")
+
+    def about_dialog(self):
+        """Show about information."""
+        about_text = (
+            "Telegram Channel Reader\n"
+            "Version 2.0\n\n"
+            "Fetches public Telegram channel messages via Google Translate proxy.\n"
+            "Features:\n"
+            "RTL support for Persian/Arabic\n"
+            "Uses curl_cffi + Playwright fallback."
+        )
+        messagebox.showinfo("About", about_text)
 
 def main():
     root = tk.Tk()
