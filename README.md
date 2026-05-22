@@ -20,6 +20,8 @@ A Python GUI application that fetches and displays text messages from public Tel
 ```bash
 pip install curl_cffi beautifulsoup4 playwright
 playwright install chromium
+```
+
 
 
 📥 Installation
