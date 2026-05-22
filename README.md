@@ -2,7 +2,7 @@
 
 # 📡 Telegram Channel Reader
 
-A beautiful Python GUI application that fetches and displays text messages from public Telegram channels using Google Translate as a proxy. Works without modifying your hosts file by using custom IP mapping. **Automatically detects Persian/Arabic (RTL) text and renders it correctly**, handling numbers, English words, and emojis within RTL messages.
+A Python GUI application that fetches and displays text messages from public Telegram channels using Google Translate as a proxy. Works without modifying your hosts file by using custom IP mapping.
 
 ![Screenshot](screenshot.png) <!-- optional: add a screenshot later -->
 
