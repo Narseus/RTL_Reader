@@ -29,8 +29,8 @@ playwright install chromium
 Clone the repository and run the script:
 
 ```bash
-git clone https://github.com/narseus/rtl_reader.git
-cd rtl_reader
+git clone https://github.com/narseus/RTL_Reader.git
+cd RTL_Reader
 python telegram_reader.py
 ```
 
