@@ -20,3 +20,16 @@ A Python GUI application that fetches and displays text messages from public Tel
 ```bash
 pip install curl_cffi beautifulsoup4 playwright
 playwright install chromium
+
+
+📥 Installation
+
+Clone the repository and run the script:
+
+```bash
+git clone https://github.com/narseus/rtl_reader.git
+cd rtl_reader
+python telegram_reader.py
+```
+
+Note: No system‑wide changes are required. The script uses its own IP mapping.
