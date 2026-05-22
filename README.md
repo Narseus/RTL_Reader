@@ -8,14 +8,9 @@ A beautiful Python GUI application that fetches and displays text messages from 
 
 ## ✨ Features
 
-- 🖥️ **Clean, modern GUI** based on `tkinter` with Calibri font
-- 🔄 **Automatic RTL detection** – Persian, Arabic, and mixed‑script messages displayed right‑aligned and correctly ordered
-- 💡 **Channel suggestions** displayed as hints next to the input field
 - 🚀 **Two fetch methods** – `curl_cffi` (fast, no browser) with fallback to `playwright`
-- 🧩 **Custom DNS mapping** – you define IP→domain rules directly in the code (no system hosts file required)
-- 🔘 **Handles “Preview channel” button** automatically for channels that need it
-- 📝 **Numbered messages** for easy reference
-- ⚡ **Asynchronous fetching** – GUI stays responsive
+- 🧩 **Custom DNS mapping** – you define IP→domain rules directly in the code
+- ⚡ **Asynchronous fetching**
 
 ## 🔧 Requirements
 
